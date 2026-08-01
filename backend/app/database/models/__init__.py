@@ -8,10 +8,10 @@ from .users import User
 
 __all__ = [
     "Base",
-    "User",
-    "SourceDocument",
-    "DocumentChunk",
-    "ChatThread",
     "ChatMessage",
+    "ChatThread",
+    "DocumentChunk",
     "MessageCitation",
+    "SourceDocument",
+    "User",
 ]
