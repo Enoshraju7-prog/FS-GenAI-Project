@@ -20,8 +20,8 @@ The critical path is **data model → ingestion → retrieval → LLM → citati
 ## Phase 0 — Prerequisites & foundation
 
 - [x] Install toolchain: Python 3.12+, `uv`, Node 20+, `pnpm`
-- [ ] Create Supabase project and collect credentials ([supabase-setup](guides/supabase-setup.md))
-- [ ] Create OpenAI API key (needed from Phase 6 onward)
+- [x] Create Supabase project and collect credentials ([supabase-setup](guides/supabase-setup.md))
+- [x] Create OpenAI API key (needed from Phase 6 onward)
 - [x] Set `USER_AGENT` in `data/download.py` and download sample 10-K corpus:
   ```bash
   uv run data/download.py
@@ -34,9 +34,9 @@ The critical path is **data model → ingestion → retrieval → LLM → citati
 
 Goal: a running FastAPI service with a migrated Supabase schema.
 
-- [ ] Init backend deps and project layout ([backend-setup](guides/backend-setup.md))
-- [ ] `app/config.py` — settings module, fail fast on missing env vars
-- [ ] `app/main.py` — FastAPI app, CORS, health check (`GET /health`)
+- [x] Init backend deps and project layout ([backend-setup](guides/backend-setup.md))
+- [x] `app/config.py` — settings module, fail fast on missing env vars
+- [x] `app/main.py` — FastAPI app, CORS, health check (`GET /health`)
 - [ ] SQLAlchemy models in `app/database/models/`:
   - [ ] `users`
   - [ ] `source_documents`
