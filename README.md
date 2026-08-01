@@ -1,161 +1,68 @@
-# Full-Stack GenAI Project
+# Document Copilot
 
-A full-stack AI-powered document Q&A application built with **FastAPI**, **React**, and **Supabase**.
+An internal AI chatbot that lets analysts query a corpus of documents in plain English and get sourced, citable answers.
 
-Users can ask natural language questions and get answers grounded in hundreds of real SEC financial filings (Apple, Microsoft, Nvidia, Amazon, Google). The AI reads the documents and cites its sources — no hallucination, just evidence.
+## The client
 
----
+**Driftwood Capital** — fictional independent investment research firm. Their analysts spend half their week reading 10-Ks and 10-Qs before they can produce any original analysis. Document Copilot eats that intake work so they can skip straight to insight.
 
-## What We're Building
+Full brief: [docs/client-brief.md](docs/client-brief.md)
 
-**"Driftwood Capital"** — a fictional investment research firm where analysts need to search through years of company reports instantly.
+## Stack
 
-Instead of reading 500-page PDFs manually, analysts type a question like:
-> *"What were Apple's biggest risks in 2022?"*
+| Layer              | Choice                                               |
+| ------------------ | ---------------------------------------------------- |
+| Backend            | Python + FastAPI                                     |
+| Frontend           | Vite + React SPA + TypeScript                        |
+| Database           | Supabase Postgres (users, chats, documents, chunks)  |
+| Migrations         | SQLAlchemy models + Alembic                          |
+| Retrieval          | Supabase `pgvector` + Postgres full-text search      |
+| Auth               | Supabase Auth (email only)                           |
+| Hosting            | Railway                                              |
+| LLM + embeddings   | OpenAI                                               |
 
-…and the system finds the relevant parts of the actual filings and answers with citations.
+## Repo layout
 
-This is called **RAG** (Retrieval-Augmented Generation) — a core AI engineering pattern used in real products.
-
----
-
-## Tech Stack
-
-| Layer | Technology | What it does |
-|-------|-----------|-------------|
-| Backend | **FastAPI** (Python) | API server — handles requests, runs AI logic |
-| Frontend | **React + TypeScript** (Vite) | Chat interface users interact with |
-| Database | **Supabase** (PostgreSQL + pgvector) | Stores documents and AI embeddings |
-| AI | **OpenAI API** | Generates answers and creates embeddings |
-| Document parsing | **Docling** | Converts messy HTML filings into clean chunks |
-| Deployment | **Railway** | Hosts the backend in the cloud |
-| UI Components | **shadcn/ui + Prompt Kit** | Pre-built chat UI components |
-
----
-
-## Project Structure
-
+```text
+document-copilot/
+├── AGENTS.md           # agent instructions (read first)
+├── README.md           # this file
+├── data/               # local corpus + download script (payloads gitignored)
+├── docs/
+│   └── client-brief.md # the client one-pager
+├── backend/            # FastAPI service
+└── frontend/           # React SPA (Vite)
 ```
-FS-GenAI-Project/
-├── backend/          # FastAPI Python backend
-│   ├── app/          # API routes, auth, RAG logic
-│   └── ingest/       # Document ingestion pipeline
-├── frontend/         # React + TypeScript frontend
-│   └── src/          # Components, pages, hooks
-├── data/             # SEC filing downloader scripts
-└── README.md
-```
-
----
-
-## Architecture Overview
-
-```
-[SEC EDGAR API]
-      ↓ download HTM filings
-[Docling] → chunk documents into sections
-      ↓
-[OpenAI Embeddings] → convert text to vectors
-      ↓
-[Supabase pgvector] → store chunks + vectors
-      ↓
-[FastAPI RAG endpoint] ← user question
-      ↓ semantic search → retrieve top chunks
-[OpenAI LLM] → generate answer with citations
-      ↓
-[React Chat UI] → display answer + sources
-```
-
----
 
 ## Prerequisites
 
-Before you start, install these tools:
+Install these before setting up `backend/` or `frontend/`:
 
-- **Python 3.11+** — [python.org](https://python.org)
-- **UV** — fast Python package manager: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- **Node.js 20+** — [nodejs.org](https://nodejs.org)
-- **pnpm** — fast Node package manager: `npm install -g pnpm`
-- A **Supabase** account (free) — [supabase.com](https://supabase.com)
-- An **OpenAI API** key — [platform.openai.com](https://platform.openai.com)
+| Tool | Version | Used for | Install |
+| ---- | ------- | -------- | ------- |
+| [Python](https://www.python.org/downloads/) | 3.12+ | Backend runtime | OS package manager or python.org |
+| [uv](https://docs.astral.sh/uv/getting-started/installation/) | latest | Backend deps + `data/download.py` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| [Node.js](https://nodejs.org/) | 20+ (LTS) | Frontend toolchain | nodejs.org or `nvm install --lts` |
+| [pnpm](https://pnpm.io/installation) | latest | Frontend package manager | `corepack enable && corepack prepare pnpm@latest --activate` |
 
----
+You also need accounts/keys for external services once the app is wired up. Start with [docs/guides/supabase-setup.md](docs/guides/supabase-setup.md) (account + project), then create an [OpenAI API key](https://platform.openai.com/api-keys) when the LLM layer is wired up.
 
-## Setup (Step by Step)
+## Running locally
 
-### 1. Clone the repo
+To be added during the build. Setup guides:
+
+- [Supabase](docs/guides/supabase-setup.md) — account, hosted project (dashboard or CLI)
+- [Backend](docs/guides/backend-setup.md)
+- [Frontend](docs/guides/frontend-setup.md)
+
+## Sample SEC data
+
+Use the standalone downloader to fetch a small local 10-K sample from SEC EDGAR.
+Edit the params at the top of `data/download.py`, especially `USER_AGENT`, then run:
+
 ```bash
-git clone https://github.com/Enoshraju7-prog/FS-GenAI-Project.git
-cd FS-GenAI-Project
+uv run data/download.py
 ```
 
-### 2. Download SEC filings
-```bash
-cd data
-uv run download.py
-```
-This downloads the last 5 years of 10-K/10-Q filings for Apple, Microsoft, Nvidia, Amazon, and Google.
-
-### 3. Set up environment variables
-```bash
-# Backend
-cp backend/.env.example backend/.env
-# Fill in: SUPABASE_URL, SUPABASE_KEY, OPENAI_API_KEY
-
-# Frontend
-cp frontend/.env.example frontend/.env
-# Fill in: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_API_BASE_URL
-```
-
-### 4. Run the backend
-```bash
-cd backend
-uv run uvicorn app.main:app --reload
-```
-API runs at `http://localhost:8000`. Docs at `http://localhost:8000/docs`.
-
-### 5. Run the ingestion pipeline
-```bash
-cd backend
-uv run python ingest/pipeline.py
-```
-This chunks the documents, generates embeddings, and loads them into Supabase.
-
-### 6. Run the frontend
-```bash
-cd frontend
-pnpm install
-pnpm dev
-```
-Opens at `http://localhost:5173`.
-
----
-
-## Key Concepts Explained
-
-### What is RAG?
-RAG = **Retrieval-Augmented Generation**. Instead of asking an AI to answer from memory (which leads to hallucination), we first *retrieve* relevant document chunks from our database, then *generate* an answer using those chunks as context. The AI can only answer based on what's in the documents.
-
-### What are embeddings?
-An embedding is a list of numbers (a "vector") that represents the meaning of a piece of text. Similar meanings = similar vectors. This lets us search documents by meaning, not just keywords. Example: "annual revenue" and "yearly income" would have similar vectors even though the words differ.
-
-### What is pgvector?
-A Postgres extension that adds a special column type for storing vectors. Supabase includes it built-in. It lets you do "find the 5 most similar chunks to this question" as a single SQL query.
-
-### What is Docling?
-An open-source library by IBM that converts complex document formats (HTML, PDF) into clean, structured chunks that preserve tables, section headers, and page numbers — much better than simple text splitting.
-
----
-
-## Sessions Progress
-
-| Session | Topics Covered | Status |
-|---------|---------------|--------|
-| Session 1 | Project setup, overview, GitHub init | ✅ Done |
-
----
-
-## Credits
-
-Built by following [Dave Ebbelaar's tutorial](https://youtu.be/qF5il_9IwME).
-All code written and maintained by [Enoshraju7-prog](https://github.com/Enoshraju7-prog).
+By default this downloads the latest 5 10-K filings for AAPL, MSFT, NVDA, AMZN, and GOOGL into year folders under `data/downloads/` and writes a `manifest.json`.
+Downloaded files are gitignored; the `data/` folder itself stays in git for the script and notes.

@@ -1,50 +1,41 @@
+# Environments / secrets
+.env
+.env.*
+!.env.example
+
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
+*$py.class
 .venv/
 venv/
-.uv/
-*.egg-info/
-dist/
-build/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+dist/
+build/
+*.egg-info/
 
-# Environment variables — NEVER commit these
-.env
-.env.local
-.env.*.local
-
-# Node / Frontend
+# Node / Next.js
 node_modules/
-frontend/dist/
-frontend/.vite/
+.turbo/
 *.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Data files — too large for git
-data/raw/
-data/filings/
-*.htm
-*.html
-manifest.json
+# Data / artifacts (downloaded corpus files are large, never check in)
+/data/downloads/*
+!/data/downloads/.gitkeep
+*.parquet
 
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-
-# IDE
-.cursor/
+# IDE / OS
 .vscode/
 .idea/
-*.swp
-*.swo
+.DS_Store
+Thumbs.db
 
 # Logs
 *.log
 logs/
-
-# Jupyter
-.ipynb_checkpoints/
