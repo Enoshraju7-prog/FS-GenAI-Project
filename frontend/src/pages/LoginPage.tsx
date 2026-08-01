@@ -30,7 +30,7 @@ export default function LoginPage() {
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
-        navigate("/")
+        navigate("/chats")
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong")

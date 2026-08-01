@@ -1,4 +1,10 @@
 import { request } from "@/lib/http"
+import { supabase } from "@/lib/supabase"
+
+export async function getAccessToken(): Promise<string> {
+  const { data } = await supabase.auth.getSession()
+  return data.session?.access_token ?? ""
+}
 
 export const api = {
   get: <T>(path: string) =>

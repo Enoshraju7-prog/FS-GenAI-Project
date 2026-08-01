@@ -1,14 +1,7 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
-import LoginPage from "@/pages/LoginPage"
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import ProtectedRoute from "@/components/ProtectedRoute"
-
-function ChatPlaceholder() {
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p className="text-muted-foreground">Chat coming soon — Phase 3</p>
-    </div>
-  )
-}
+import ChatLayout from "@/pages/ChatLayout"
+import LoginPage from "@/pages/LoginPage"
 
 export default function App() {
   return (
@@ -16,9 +9,10 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<ChatPlaceholder />} />
+          <Route path="/chats" element={<ChatLayout />} />
+          <Route path="/chats/:threadId" element={<ChatLayout />} />
         </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/chats" replace />} />
       </Routes>
     </BrowserRouter>
   )
