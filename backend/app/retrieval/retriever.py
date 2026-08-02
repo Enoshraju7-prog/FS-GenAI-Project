@@ -13,6 +13,7 @@ from app.database.models import DocumentChunk, SourceDocument
 from app.database.session import get_session
 from app.retrieval.embeddings import embed_query
 from app.retrieval.fusion import reciprocal_rank_fusion
+from app.retrieval.keywords import extract_fts_keywords
 from app.retrieval.queries import full_text_search, semantic_search
 from app.retrieval.types import RankedChunkHit, RetrievedPassage, SearchFilters
 
@@ -62,11 +63,15 @@ class DocumentRetriever:
         candidate_k: int,
         include_neighbors: bool,
     ) -> list[RetrievedPassage]:
-        query_vec = embed_query(query)
+        with ThreadPoolExecutor(max_workers=2) as prep:
+            embed_future = prep.submit(embed_query, query)
+            keywords_future = prep.submit(extract_fts_keywords, query, filters=filters)
+            query_vec = embed_future.result()
+            fts_query = keywords_future.result()
 
         semantic_hits, fts_hits = _dual_search(
             query_vec,
-            query,
+            fts_query,
             candidate_k=candidate_k,
             filters=filters,
         )
@@ -127,7 +132,7 @@ class DocumentRetriever:
 
 def _dual_search(
     query_vec: list[float],
-    query_text: str,
+    fts_query: str,
     *,
     candidate_k: int,
     filters: SearchFilters | None,
@@ -147,7 +152,7 @@ def _dual_search(
         with get_session() as search_session:
             return full_text_search(
                 search_session,
-                query_text,
+                fts_query,
                 limit=candidate_k,
                 filters=filters,
             )

@@ -1,11 +1,12 @@
-"""Run assistant smoke queries against the real corpus.
-
-Edit QUERIES below, then: uv run python scripts/smoke_assistant.py
-"""
+"""Run one assistant smoke query. Edit QUERY_KEY, then: uv run python scripts/smoke_assistant.py"""
 
 from __future__ import annotations
 
+import asyncio
+import sys
 import uuid
+
+import nest_asyncio
 
 from app.assistant.agent import run_document_agent
 from app.assistant.deps import DocumentAgentDeps, TurnRegistry
@@ -13,70 +14,81 @@ from app.assistant.progress import (
     add_progress_listener,
     clear_progress_listeners,
     elapsed_seconds,
+    report_progress,
     reset_progress_clock,
 )
 from app.config import settings
 from app.grounding.validator import GroundingValidator, prune_unreferenced_citations
 from app.retrieval.retriever import DocumentRetriever
 
-# Edit this list — add, remove, or change questions before each run.
-QUERIES = [
-    "Across Apple's 2021-2025 10-Ks, how did the revenue mix between iPhone, "
+nest_asyncio.apply()
+
+QUERIES = {
+    "apple-mix": "Across Apple's 2021-2025 10-Ks, how did the revenue mix between iPhone, "
     "Services, Mac, iPad, and Wearables change?",
-    "How did NVIDIA describe demand drivers for its Data Center business "
+    "nvda-datacenter": "How did NVIDIA describe demand drivers for its Data Center business "
     "from fiscal 2021 through fiscal 2025?",
-    "If an analyst asks whether the filings prove that generative AI improved "
-    "margins for any of these companies, what evidence exists in the corpus, "
-    "and where should the bot refuse to infer beyond the filings?",
-    "What is the best stock to buy right now?",
-]
+    "q10-refusal": "Do the filings prove that generative AI improved margins for any of "
+    "these companies?",
+    "underspecified": "What is the best stock to buy right now?",
+}
+
+QUERY_KEY = "apple-mix"
 
 
 def _print_progress(message: str) -> None:
     print(f"[{elapsed_seconds():7.2f}s] {message}", flush=True)
 
 
-async def _validate(answer, registry):
-    return await GroundingValidator().validate(answer, registry)
+def setup_progress_logging() -> None:
+    """Register the console progress listener. Call this before run_document_agent()
+    in a Jupyter cell so the cell shows live progress instead of sitting silent."""
+    clear_progress_listeners()
+    reset_progress_clock()
+    add_progress_listener(_print_progress)
 
 
 def main() -> None:
-    import asyncio
+    setup_progress_logging()
 
-    clear_progress_listeners()
-    add_progress_listener(_print_progress)
+    query = QUERIES[QUERY_KEY]
+    registry = TurnRegistry()
+    deps = DocumentAgentDeps(
+        retriever=DocumentRetriever(),
+        registry=registry,
+        thread_id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+    )
 
-    retriever = DocumentRetriever()
-    print(f"Model: {settings.openai_chat_model}\n", flush=True)
+    print(f"Model: {settings.openai_chat_model}", flush=True)
+    print(f"Query ({QUERY_KEY}): {query}\n", flush=True)
 
-    for query in QUERIES:
-        reset_progress_clock()
-        print("\n" + "=" * 80)
-        print(f"Query: {query}\n")
+    answer = prune_unreferenced_citations(run_document_agent(query, deps))
+    validation = asyncio.run(GroundingValidator().validate(answer, registry))
 
-        registry = TurnRegistry()
-        deps = DocumentAgentDeps(
-            retriever=retriever,
-            registry=registry,
-            thread_id=uuid.uuid4(),
-            user_id=uuid.uuid4(),
-        )
+    report_progress(
+        f"grounding validation ok={validation.ok} "
+        f"insufficient_evidence={answer.insufficient_evidence} "
+        f"citations={len(answer.citations)}"
+    )
+    if validation.error:
+        report_progress(f"grounding validation error: {validation.error}")
 
-        answer = prune_unreferenced_citations(run_document_agent(query, deps))
-        validation = asyncio.run(_validate(answer, registry))
+    print(f"\ninsufficient_evidence: {answer.insufficient_evidence}", flush=True)
+    print(f"validation_ok: {validation.ok}", flush=True)
+    if validation.error:
+        print(f"validation_error: {validation.error}", flush=True)
+    print(f"\n{answer.answer}\n", flush=True)
 
-        print(f"insufficient_evidence: {answer.insufficient_evidence}")
-        print(f"validation_ok: {validation.ok}")
-        if validation.error:
-            print(f"validation_error: {validation.error}")
-        print(f"\n{answer.answer}\n")
-
-        for citation in answer.citations:
-            passage = registry.passages_by_chunk_id.get(citation.chunk_id)
-            meta = f"{passage.ticker} {passage.form} p.{passage.page}" if passage else ""
-            print(f"[{citation.citation_index}] {meta}")
-            print(f"  {citation.excerpt[:200]}")
+    for citation in answer.citations:
+        passage = registry.passages_by_chunk_id.get(citation.chunk_id)
+        meta = f"{passage.ticker} {passage.form} p.{passage.page}" if passage else ""
+        print(f"[{citation.citation_index}] {meta}\n  {citation.excerpt[:200]}", flush=True)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr, flush=True)
+        raise SystemExit(130)

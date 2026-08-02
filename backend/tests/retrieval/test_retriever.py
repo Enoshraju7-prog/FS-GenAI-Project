@@ -44,6 +44,7 @@ def test_search_preserves_fusion_order_on_hydration():
     with (
         patch("app.retrieval.retriever.get_session", _fake_get_session),
         patch("app.retrieval.retriever.embed_query", return_value=[0.1]),
+        patch("app.retrieval.retriever.extract_fts_keywords", return_value="query"),
         patch(
             "app.retrieval.retriever.semantic_search",
             return_value=[
@@ -74,6 +75,7 @@ def test_search_attaches_neighbors_with_zero_fusion_score():
     with (
         patch("app.retrieval.retriever.get_session", _fake_get_session),
         patch("app.retrieval.retriever.embed_query", return_value=[0.1]),
+        patch("app.retrieval.retriever.extract_fts_keywords", return_value="query"),
         patch(
             "app.retrieval.retriever.semantic_search",
             return_value=[RankedChunkHit(chunk_id=hit_id, rank=1, score=0.9)],
@@ -113,6 +115,7 @@ def test_search_deduplicates_neighbor_already_present_in_fused_hits():
     with (
         patch("app.retrieval.retriever.get_session", _fake_get_session),
         patch("app.retrieval.retriever.embed_query", return_value=[0.1]),
+        patch("app.retrieval.retriever.extract_fts_keywords", return_value="query"),
         patch(
             "app.retrieval.retriever.semantic_search",
             return_value=[
@@ -140,6 +143,7 @@ def test_search_returns_empty_list_when_no_hits():
     with (
         patch("app.retrieval.retriever.get_session", _fake_get_session),
         patch("app.retrieval.retriever.embed_query", return_value=[0.1]),
+        patch("app.retrieval.retriever.extract_fts_keywords", return_value="query"),
         patch("app.retrieval.retriever.semantic_search", return_value=[]),
         patch("app.retrieval.retriever.full_text_search", return_value=[]),
     ):

@@ -2,7 +2,13 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
 
-from app.retrieval.queries import _build_filters, full_text_search, semantic_search
+from app.retrieval.queries import (
+    _build_filters,
+    build_full_text_search_sql,
+    build_semantic_search_sql,
+    full_text_search,
+    semantic_search,
+)
 from app.retrieval.types import SearchFilters
 
 
@@ -100,3 +106,26 @@ def test_full_text_search_score_none_when_row_score_is_none():
     hits = full_text_search(session, "anything", limit=10)
 
     assert hits[0].score is None
+
+
+def test_build_semantic_search_sql_without_filters():
+    sql = build_semantic_search_sql()
+    assert "dc.embedding <=> CAST(:query_vec AS vector)" in sql
+    assert "JOIN source_documents sd" in sql
+    assert "sd.ticker" not in sql
+
+
+def test_build_semantic_search_sql_with_filters():
+    sql = build_semantic_search_sql(
+        SearchFilters(ticker="AAPL", fiscal_years=[2021, 2022], form="10-K")
+    )
+    assert "sd.ticker = :ticker" in sql
+    assert "sd.fiscal_year = ANY(:fiscal_years)" in sql
+    assert "sd.form = :form" in sql
+
+
+def test_build_full_text_search_sql_with_filters():
+    sql = build_full_text_search_sql(SearchFilters(ticker="NVDA"))
+    assert "plainto_tsquery('english', :query_text)" in sql
+    assert "dc.search_vector @@ query" in sql
+    assert "sd.ticker = :ticker" in sql

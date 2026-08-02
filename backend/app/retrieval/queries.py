@@ -64,16 +64,7 @@ def semantic_search(
     filters: SearchFilters | None = None,
 ) -> list[RankedChunkHit]:
     filter_clause = _build_filters(filters)
-    sql = f"""
-        SELECT dc.id,
-               1 - (dc.embedding <=> CAST(:query_vec AS vector)) AS score
-        FROM document_chunks dc
-        JOIN source_documents sd ON sd.id = dc.document_id
-        WHERE dc.embedding IS NOT NULL
-        {filter_clause.sql}
-        ORDER BY dc.embedding <=> CAST(:query_vec AS vector)
-        LIMIT :limit
-    """
+    sql = _semantic_sql_template(filter_clause)
     params: dict[str, object] = {
         "query_vec": _vector_literal(query_vec),
         "limit": limit,
@@ -90,9 +81,43 @@ def full_text_search(
     limit: int,
     filters: SearchFilters | None = None,
 ) -> list[RankedChunkHit]:
-    fts_config = settings.retrieval_fts_config
     filter_clause = _build_filters(filters)
-    sql = f"""
+    sql = _fts_sql_template(settings.retrieval_fts_config, filter_clause)
+    params: dict[str, object] = {
+        "query_text": query_text,
+        "limit": limit,
+        **filter_clause.params,
+    }
+    rows = session.execute(text(sql), params).all()
+    return _rows_to_hits(rows)
+
+
+def build_semantic_search_sql(filters: SearchFilters | None = None) -> str:
+    """Expose SQL shape for unit tests."""
+    return _semantic_sql_template(_build_filters(filters))
+
+
+def build_full_text_search_sql(filters: SearchFilters | None = None) -> str:
+    """Expose SQL shape for unit tests."""
+    fts_config = settings.retrieval_fts_config
+    return _fts_sql_template(fts_config, _build_filters(filters))
+
+
+def _semantic_sql_template(filter_clause: _FilterClause) -> str:
+    return f"""
+        SELECT dc.id,
+               1 - (dc.embedding <=> CAST(:query_vec AS vector)) AS score
+        FROM document_chunks dc
+        JOIN source_documents sd ON sd.id = dc.document_id
+        WHERE dc.embedding IS NOT NULL
+        {filter_clause.sql}
+        ORDER BY dc.embedding <=> CAST(:query_vec AS vector)
+        LIMIT :limit
+    """
+
+
+def _fts_sql_template(fts_config: str, filter_clause: _FilterClause) -> str:
+    return f"""
         SELECT dc.id,
                ts_rank_cd(dc.search_vector, query) AS score
         FROM document_chunks dc
@@ -103,10 +128,3 @@ def full_text_search(
         ORDER BY score DESC
         LIMIT :limit
     """
-    params: dict[str, object] = {
-        "query_text": query_text,
-        "limit": limit,
-        **filter_clause.params,
-    }
-    rows = session.execute(text(sql), params).all()
-    return _rows_to_hits(rows)
