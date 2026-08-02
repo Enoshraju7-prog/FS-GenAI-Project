@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import Date, DateTime, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -12,7 +12,7 @@ from app.database.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.database.models.document_chunks import DocumentChunk
-    from app.database.models.users import User
+    from app.database.models.document_tables import DocumentTable
 
 
 class SourceDocument(Base, TimestampMixin):
@@ -25,7 +25,6 @@ class SourceDocument(Base, TimestampMixin):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
 
     # SEC EDGAR metadata
     ticker: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -35,7 +34,17 @@ class SourceDocument(Base, TimestampMixin):
     filing_date: Mapped[date] = mapped_column(Date, nullable=False)
     report_date: Mapped[date | None] = mapped_column(Date)
     fiscal_year: Mapped[int | None] = mapped_column(Integer)
-    accession_number: Mapped[str] = mapped_column(String(25), nullable=False)
+    accession_number: Mapped[str] = mapped_column(String(32), nullable=False)
+    primary_document: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
 
-    user: Mapped[User] = relationship(back_populates="source_documents")
-    chunks: Mapped[list[DocumentChunk]] = relationship(back_populates="document")
+    # Ingested content
+    markdown_content: Mapped[str | None] = mapped_column(Text)
+    ingested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    chunks: Mapped[list[DocumentChunk]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+    tables: Mapped[list[DocumentTable]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )

@@ -8,6 +8,7 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "alembic==1.18.5",
+    "docling==2.115.0",
     "fastapi==0.140.0",
     "httpx==0.28.1",
     "openai==2.48.0",
@@ -19,6 +20,7 @@ dependencies = [
     "sqlalchemy==2.0.51",
     "structlog==26.1.0",
     "supabase==2.31.0",
+    "tiktoken==0.13.0",
     "uvicorn==0.51.0",
 ]
 
@@ -38,4 +40,11 @@ dev = [
     "ipykernel==7.3.0",
     "pytest==9.1.1",
     "ruff==0.16.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "integration: tests that require live Supabase and OpenAI credentials",
 ]
