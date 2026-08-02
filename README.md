@@ -43,9 +43,13 @@ document-copilot/
 │   │   ├── config.py      # All env-var settings in one place
 │   │   ├── api/           # HTTP route handlers
 │   │   ├── auth/          # JWT verification + current-user dependency
-│   │   ├── chat/          # Message conversion + SSE streaming
+│   │   ├── chat/          # Message conversion, orchestrator, SSE streaming
+│   │   ├── retrieval/     # Hybrid search: pgvector + full-text + RRF fusion (see its README.md)
+│   │   ├── assistant/     # PydanticAI agent, tools, grounded output (see its README.md)
+│   │   ├── grounding/     # Citation validation — fails closed if any claim is unsupported
 │   │   ├── database/      # Supabase client, DB query helpers, ORM models
 │   │   └── schemas/       # Pydantic request/response models
+│   ├── scripts/           # Editable smoke-test scripts (real corpus, no test framework)
 │   ├── alembic/           # Database migration files
 │   └── pyproject.toml     # Python dependencies
 └── frontend/              # React SPA
@@ -148,6 +152,20 @@ uv run data/download.py
 
 This downloads 10-K filings for AAPL, MSFT, NVDA, AMZN, GOOGL into `data/downloads/`.
 
+### 6. Try the retrieval + assistant pipeline directly (optional)
+
+Once the corpus is ingested (Phase 4), you can query it without the frontend:
+
+```bash
+cd backend
+uv run python -m scripts.smoke_retrieval    # raw hybrid search results
+uv run python -m scripts.smoke_assistant    # full agent: search -> cite -> validate
+```
+
+Edit `QUERY_KEY` at the top of `smoke_assistant.py` to try a different question. See
+[`backend/app/retrieval/README.md`](backend/app/retrieval/README.md) and
+[`backend/app/assistant/README.md`](backend/app/assistant/README.md) for how each pipeline works.
+
 ---
 
 ## Build progress
@@ -158,9 +176,9 @@ This downloads 10-K filings for AAPL, MSFT, NVDA, AMZN, GOOGL into `data/downloa
 | 1 — Backend scaffold | ✅ Done | FastAPI app, Supabase schema + migrations, health check |
 | 2 — Auth | ✅ Done | Supabase JWT login, protected routes on backend + frontend |
 | 3 — Chat shell | ✅ Done | Thread CRUD, streaming stub response, chat UI with sidebar |
-| 4 — Ingestion | ⬜ To do | Parse SEC filings → chunks → OpenAI embeddings → Supabase |
-| 5 — Retrieval | ⬜ To do | Vector + full-text search, Reciprocal Rank Fusion |
-| 6 — LLM agent | ⬜ To do | PydanticAI agent, grounded answers, citation validation |
+| 4 — Ingestion | ✅ Done | Parse SEC filings → hierarchical chunks → OpenAI embeddings → Supabase |
+| 5 — Retrieval | ✅ Done | Vector (pgvector) + full-text search with LLM keyword extraction, fused with Reciprocal Rank Fusion |
+| 6 — LLM agent | ✅ Done | PydanticAI agent, grounded answers, fail-closed citation validation |
 | 7 — Trust UI | ⬜ To do | Citation chips, source passage panel |
 | 8 — Pilot readiness | ⬜ To do | Logging, latency review, end-to-end smoke tests |
 | 9 — Deploy (Railway) | ⬜ To do | Production deploy |
@@ -178,6 +196,12 @@ This downloads 10-K filings for AAPL, MSFT, NVDA, AMZN, GOOGL into `data/downloa
 **JWT authentication** — When a user logs in via Supabase, they get a signed JSON Web Token. Every API request includes this token in the `Authorization` header. The backend verifies the token signature with Supabase before processing any request.
 
 **Alembic migrations** — Database schema changes (adding a table, adding a column) are tracked as numbered Python files. You can upgrade or downgrade the schema reliably, and the history is in version control alongside the code.
+
+**Hybrid search + Reciprocal Rank Fusion (RRF)** — Vector (semantic) search and keyword (full-text) search each catch things the other misses: semantic search finds paraphrases and related concepts, keyword search finds exact terms and numbers. Running both and merging their ranked result lists — instead of picking one — catches more relevant passages than either alone. RRF merges the two ranked lists by rank position (`1 / (k + rank)` per list, summed), not by raw score, because cosine similarity and text-search scores live on different, incomparable scales.
+
+**Why keyword extraction matters for full-text search** — Postgres full-text search (`plainto_tsquery`) requires a chunk to contain *every* word in the query. A natural sentence like "How did NVIDIA describe demand drivers for its Data Center business?" has 8+ content words after removing stopwords — almost no single chunk contains all of them, so the raw-query search returns **zero** results in practice (verified against the real corpus). The fix is an LLM step that distills the question down to 3-5 salient search terms (e.g. `"Data Center demand"`) before it ever reaches Postgres.
+
+**Fail-closed validation** — When correctness matters more than always having an answer, every failure mode should refuse rather than guess. The grounding validator here checks citation shape (do the `[1][2][3]` markers in the answer match real citations?) *and* runs a second, independent LLM call asking "does this exact source text actually support this exact claim?" If either check fails, the system retries once, then returns "could not verify" instead of ever showing an unverified answer.
 
 ---
 
