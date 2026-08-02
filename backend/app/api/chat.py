@@ -1,26 +1,28 @@
-"""Chat API — thread CRUD + streaming endpoint."""
+"""Chat API — thread CRUD + real grounded-agent streaming endpoint."""
 
 from __future__ import annotations
+
+import uuid
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import StreamingResponse
 
 from app.auth.dependencies import CurrentUser, get_access_token, get_current_user
-from app.chat.messages import extract_last_user_message, row_to_message_out
-from app.chat.streaming import STUB_REPLY, stub_stream
+from app.chat.messages import extract_last_user_message
+from app.chat.orchestrator import run_turn
 from app.database.chats import (
-    append_messages,
     create_thread,
-    get_thread_messages,
+    delete_thread,
     list_threads,
+    load_messages,
     require_thread_access,
-    update_thread_title,
 )
+from app.database.supabase import create_user_client
 from app.database.users import ensure_user
+from app.retrieval.retriever import DocumentRetriever
 from app.schemas.chat import (
     ChatStreamRequest,
     CreateThreadRequest,
-    MessageOut,
     ThreadCreated,
     ThreadDetailResponse,
     ThreadsResponse,
@@ -34,8 +36,8 @@ async def get_threads(
     user: CurrentUser = Depends(get_current_user),
     access_token: str = Depends(get_access_token),
 ) -> ThreadsResponse:
-    rows = await list_threads(user, access_token)
-    return ThreadsResponse(threads=rows)
+    threads = await list_threads(user, access_token)
+    return ThreadsResponse(threads=threads)
 
 
 @router.post(
@@ -49,27 +51,28 @@ async def post_thread(
     access_token: str = Depends(get_access_token),
 ) -> ThreadCreated:
     await ensure_user(user)
-    row = await create_thread(body.title, user, access_token)
-    return ThreadCreated(**row)
+    return await create_thread(body.title, user, access_token)
 
 
 @router.get("/threads/{thread_id}", response_model=ThreadDetailResponse)
 async def get_thread(
-    thread_id: str,
+    thread_id: uuid.UUID,
     user: CurrentUser = Depends(get_current_user),
     access_token: str = Depends(get_access_token),
 ) -> ThreadDetailResponse:
-    import uuid as _uuid
+    thread = await require_thread_access(thread_id, user)
+    messages = await load_messages(thread_id, access_token)
+    return ThreadDetailResponse(id=str(thread.id), title=thread.title, messages=messages)
 
-    tid = _uuid.UUID(thread_id)
-    thread = await require_thread_access(tid, user)
-    rows = await get_thread_messages(tid, access_token)
-    messages: list[MessageOut] = [row_to_message_out(r) for r in rows]
-    return ThreadDetailResponse(
-        id=thread["id"],
-        title=thread["title"],
-        messages=messages,
-    )
+
+@router.delete("/threads/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_thread_route(
+    thread_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+    access_token: str = Depends(get_access_token),
+) -> None:
+    await require_thread_access(thread_id, user)
+    await delete_thread(thread_id, access_token)
 
 
 @router.post("/stream")
@@ -80,18 +83,19 @@ async def chat_stream(
 ) -> StreamingResponse:
     await ensure_user(user)
     thread = await require_thread_access(body.thread_id, user)
-
-    user_text = extract_last_user_message(body.messages)
-
-    await append_messages(body.thread_id, user_text, STUB_REPLY)
-
-    # Auto-title: update thread title from first user message
-    if thread["title"] == "New chat":
-        title = user_text[:60].strip() or "New chat"
-        await update_thread_title(body.thread_id, title)
+    user_message = extract_last_user_message(body.messages)
+    client = await create_user_client(access_token)
+    retriever = DocumentRetriever()
 
     return StreamingResponse(
-        stub_stream(),
+        run_turn(
+            client=client,
+            thread_id=body.thread_id,
+            user=user,
+            user_message=user_message,
+            thread_title=thread.title,
+            retriever=retriever,
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

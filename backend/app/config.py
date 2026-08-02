@@ -25,6 +25,17 @@ class Settings(BaseSettings):
     openai_api_key: str
     openai_embedding_model: str = "text-embedding-3-small"
     openai_embedding_dimensions: int = 1536
+    openai_chat_model: str = "gpt-5.5"
+    openai_grounding_model: str = "gpt-4.1-mini"
+    openai_agent_request_limit: int = 20
+    openai_agent_temperature: float = 0.0
+
+    # Retrieval (hybrid search)
+    retrieval_candidate_k: int = 50
+    retrieval_top_k: int = 10
+    retrieval_rrf_k: int = 60
+    retrieval_neighbor_radius: int = 1
+    retrieval_fts_config: str = "english"
 
     # Comma-separated in .env; use `cors_origins` for the parsed list.
     allowed_origins: str = "http://localhost:5173"

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 
@@ -36,41 +37,58 @@ class ThreadCreated(_CamelModel):
     updated_at: datetime
 
 
-# ── Message models ───────────────────────────────────────────────────────────
+# ── Message parts (AI SDK v5 UIMessage shape) ───────────────────────────────
 
-class UIMessagePart(BaseModel):
-    type: str
-    text: str = ""
-
-
-class UIMessageIn(BaseModel):
-    """Incoming AI SDK UIMessage (v7 parts format)."""
-
-    id: str | None = None
-    role: str
-    content: str | None = None   # v3-compat fallback
-    parts: list[UIMessagePart] | None = None
-
-
-class MessagePartOut(BaseModel):
-    type: str
+class TextPart(BaseModel):
+    type: Literal["text"] = "text"
     text: str
 
 
-class MessageOut(BaseModel):
-    id: str
-    role: str
-    parts: list[MessagePartOut]
+class CitationPayload(_CamelModel):
+    citation_index: int
+    chunk_id: uuid.UUID
+    excerpt: str
+    ticker: str
+    company_name: str | None = None
+    form: str
+    filing_date: date
+    page: str | None = None
+    section: str | None = None
+
+
+class CitationPart(BaseModel):
+    type: Literal["data-citation"] = "data-citation"
+    id: str | None = None
+    data: CitationPayload
+
+
+class StatusPayload(BaseModel):
+    stage: str
+    message: str
+
+
+class StatusPart(BaseModel):
+    type: Literal["data-status"] = "data-status"
+    data: StatusPayload
+
+
+MessagePart = Annotated[TextPart | CitationPart, Field(discriminator="type")]
+
+
+class UIMessage(BaseModel):
+    id: str | None = None
+    role: Literal["user", "assistant", "system"]
+    parts: list[MessagePart]
 
 
 class ThreadDetailResponse(_CamelModel):
     id: str
     title: str
-    messages: list[MessageOut]
+    messages: list[UIMessage]
 
 
 # ── Stream request ────────────────────────────────────────────────────────────
 
 class ChatStreamRequest(_CamelModel):
     thread_id: uuid.UUID
-    messages: list[UIMessageIn]
+    messages: list[UIMessage]
