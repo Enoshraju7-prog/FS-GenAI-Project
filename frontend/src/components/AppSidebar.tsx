@@ -182,11 +182,13 @@ export default function AppSidebar({ activeThreadId, theme, onThemeChange }: Pro
                 <ChevronsUpDown className="ml-auto" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" side="top" className="w-56">
-                <DropdownMenuLabel className="text-xs text-muted-foreground">Theme</DropdownMenuLabel>
                 <DropdownMenuRadioGroup
                   value={theme}
                   onValueChange={(value) => onThemeChange(value as Theme)}
                 >
+                  {/* DropdownMenuLabel is Base UI's Menu.GroupLabel — it reads group
+                      context and throws if rendered outside a Group/RadioGroup. */}
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">Theme</DropdownMenuLabel>
                   <DropdownMenuRadioItem value="light">
                     <Sun />
                     Light

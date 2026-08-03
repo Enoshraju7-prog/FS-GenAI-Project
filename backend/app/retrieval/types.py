@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-MAX_PASSAGE_EXCERPT_CHARS = 800
+MAX_PASSAGE_EXCERPT_CHARS = 500
 MAX_AGENT_OUTPUT_CHARS = 12_000
 
 
@@ -63,12 +63,23 @@ def _format_one_passage(passage: RetrievedPassage, *, include_neighbors: bool) -
     return "\n".join(lines)
 
 
-def format_passages_for_agent(passages: list[RetrievedPassage]) -> str:
-    """Bounded, grep-style text for future PydanticAI tool responses."""
+def format_passages_for_agent(
+    passages: list[RetrievedPassage],
+    *,
+    include_neighbors: bool = False,
+) -> str:
+    """Bounded, grep-style text for PydanticAI tool responses.
+
+    Neighbours are off by default: every agent iteration re-sends the whole
+    conversation, so inlining two extra excerpts per hit tripled the token cost of
+    each search. The agent can still pull context deliberately with
+    read_surrounding_chunks, and the source panel gets neighbours from
+    /chat/chunks/{id}/context.
+    """
     if not passages:
         return "No matching passages found in the filing corpus."
 
-    blocks = [_format_one_passage(p, include_neighbors=True) for p in passages]
+    blocks = [_format_one_passage(p, include_neighbors=include_neighbors) for p in passages]
     output = "\n\n".join(blocks)
     if len(output) > MAX_AGENT_OUTPUT_CHARS:
         output = (

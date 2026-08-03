@@ -31,12 +31,14 @@ class Settings(BaseSettings):
     openai_embedding_dimensions: int = 1536
     openai_chat_model: str = "gpt-5.5"
     openai_grounding_model: str = "gpt-4.1-mini"
-    openai_agent_request_limit: int = 20
+    # Each agent iteration re-sends the whole conversation, so this caps cost as much
+    # as it caps latency. 8 is ample for search -> read -> answer.
+    openai_agent_request_limit: int = 8
     openai_agent_temperature: float = 0.0
 
     # Retrieval (hybrid search)
     retrieval_candidate_k: int = 50
-    retrieval_top_k: int = 10
+    retrieval_top_k: int = 5
     retrieval_rrf_k: int = 60
     retrieval_neighbor_radius: int = 1
     retrieval_fts_config: str = "english"

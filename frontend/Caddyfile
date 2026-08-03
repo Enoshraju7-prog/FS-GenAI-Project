@@ -1,0 +1,30 @@
+{
+	admin off
+	persist_config off
+	# Railway terminates TLS at its edge, so Caddy serves plain HTTP behind it.
+	auto_https off
+	log {
+		format json
+	}
+	servers {
+		trusted_proxies static private_ranges 100.0.0.0/8
+	}
+}
+
+:{$PORT:3000} {
+	# /health must be matched before the SPA fallback, or the healthcheck gets
+	# index.html back instead of a plain "ok".
+	@health path /health
+	handle @health {
+		respond "ok" 200
+	}
+
+	handle {
+		root * /srv
+		encode gzip
+
+		# React Router owns client-side routes, so any unknown path serves the app.
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -7,10 +7,13 @@ export default function ProtectedRoute() {
   const [session, setSession] = useState<Session | null | undefined>(undefined)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null))
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
+      // `undefined` means "still loading" here, so it must never come from an auth
+      // event — a sign-out arriving as undefined renders null and blanks the page
+      // instead of redirecting to /login.
+      setSession(session ?? null)
     })
 
     return () => subscription.unsubscribe()
