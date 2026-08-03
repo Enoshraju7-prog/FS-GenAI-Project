@@ -19,11 +19,12 @@ class Settings(BaseSettings):
     supabase_service_role_key: str
 
     # Postgres — direct/session connection for Alembic and raw DB access.
-    # Pool defaults (5 + 10 overflow) are too small for the ~40-analyst pilot, since
-    # every retrieval turn holds a connection while it runs blocking SQL in a thread.
+    # Supabase's session pooler hard-caps a client at 15 connections, so pool_size +
+    # max_overflow must stay under it or every checkout fails with EMAXCONNSESSION.
+    # Headroom is left for Alembic and ad-hoc psql sessions.
     database_url: str
-    db_pool_size: int = 10
-    db_max_overflow: int = 20
+    db_pool_size: int = 5
+    db_max_overflow: int = 5
 
     # OpenAI
     openai_api_key: str
