@@ -29,16 +29,20 @@ class Settings(BaseSettings):
     openai_api_key: str
     openai_embedding_model: str = "text-embedding-3-small"
     openai_embedding_dimensions: int = 1536
-    # gpt-4.1 for cost. It searches less eagerly than a gpt-5 class model on multi-part
-    # questions, so answer breadth is better bought through retrieval quality (chunk
-    # section metadata, top_k) than by paying for a bigger model.
-    openai_chat_model: str = "gpt-4.1"
+    # gpt-4.1 is rate-limited to 30k TPM on this account — 16x below the gpt-5 family's
+    # 500k — and a turn with neighbours inlined blows through that mid-run. Measured
+    # 2026-08-03 from x-ratelimit-limit-tokens, not assumed.
+    openai_chat_model: str = "gpt-5"
     openai_grounding_model: str = "gpt-4.1-mini"
     # Each agent iteration re-sends the whole conversation, so this caps cost as much as
     # latency. Multi-part questions ("demand drivers, customer concentration, and supply
     # constraints") need several search/read rounds; 8 cut them off mid-run.
     openai_agent_request_limit: int = 20
     openai_agent_temperature: float = 0.0
+    # Rate limits are per-minute and this account's gpt-4.1 tier is small, so a busy
+    # turn will hit 429 mid-run. The SDK honours Retry-After; these just give it room.
+    openai_max_retries: int = 5
+    openai_timeout_seconds: float = 120.0
 
     # Retrieval (hybrid search)
     retrieval_candidate_k: int = 50

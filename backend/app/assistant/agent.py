@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from openai import AsyncOpenAI
 from pydantic_ai import Agent, UsageLimits
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -29,9 +30,18 @@ _document_agent: Agent[DocumentAgentDeps, GroundedAnswer] | None = None
 def get_document_agent() -> Agent[DocumentAgentDeps, GroundedAnswer]:
     global _document_agent
     if _document_agent is None:
+        # A grounded turn issues several agent iterations in quick succession, and each
+        # one re-sends the whole conversation — enough to trip a per-minute token limit
+        # mid-run. OpenAI returns a Retry-After on 429, so let the SDK wait it out
+        # instead of failing the analyst's question.
+        client = AsyncOpenAI(
+            api_key=settings.openai_api_key,
+            max_retries=settings.openai_max_retries,
+            timeout=settings.openai_timeout_seconds,
+        )
         model = OpenAIChatModel(
             settings.openai_chat_model,
-            provider=OpenAIProvider(api_key=settings.openai_api_key),
+            provider=OpenAIProvider(openai_client=client),
         )
         _document_agent = Agent(
             model,
