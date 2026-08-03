@@ -22,7 +22,15 @@ _session_factory: sessionmaker[Session] | None = None
 def get_engine() -> Engine:
     global _engine, _session_factory
     if _engine is None:
-        _engine = create_engine(settings.sqlalchemy_database_url)
+        _engine = create_engine(
+            settings.sqlalchemy_database_url,
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
+            # Supabase drops idle connections; without a liveness check the first query
+            # on a stale one fails at random.
+            pool_pre_ping=True,
+            pool_recycle=1800,
+        )
         _session_factory = sessionmaker(bind=_engine, expire_on_commit=False)
     return _engine
 

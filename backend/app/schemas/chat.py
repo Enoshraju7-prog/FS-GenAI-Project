@@ -72,7 +72,10 @@ class StatusPart(BaseModel):
     data: StatusPayload
 
 
-MessagePart = Annotated[TextPart | CitationPart, Field(discriminator="type")]
+# Status parts are transient run progress, never persisted and never fed back to the
+# model — but the AI SDK keeps them on the assistant message it holds in memory, so a
+# client replaying its history can legitimately send them. Accept and ignore.
+MessagePart = Annotated[TextPart | CitationPart | StatusPart, Field(discriminator="type")]
 
 
 class UIMessage(BaseModel):
@@ -85,6 +88,19 @@ class ThreadDetailResponse(_CamelModel):
     id: str
     title: str
     messages: list[UIMessage]
+
+
+# ── Source passage context ───────────────────────────────────────────────────
+
+class ChunkContextPassage(_CamelModel):
+    chunk_id: uuid.UUID
+    chunk_index: int
+    text: str
+    is_anchor: bool
+
+
+class ChunkContextResponse(_CamelModel):
+    passages: list[ChunkContextPassage]
 
 
 # ── Stream request ────────────────────────────────────────────────────────────

@@ -19,6 +19,8 @@ from ingest.chunking import (
 )
 from ingest.embeddings import EMBED_BATCH_SIZE, embed_texts
 
+INSERT_BATCH_SIZE = 200
+
 
 @dataclass(frozen=True, slots=True)
 class IngestCounts:
@@ -66,7 +68,7 @@ def _document_tables_from_records(
     tables_by_index: dict[int, DocumentTable] = {}
     for record in records:
         metadata = record.chunk_metadata
-        if metadata.get("chunk_kind") != "table_row":
+        if metadata.get("chunk_kind") != "table":
             continue
         table_data = metadata.get("table")
         table_index = metadata.get("table_index")
@@ -135,7 +137,7 @@ def ingest_document(
         session.flush()
     table_ids_by_index = {table.table_index: table.id for table in document_tables}
 
-    for record, embedding in zip(records, vectors, strict=True):
+    for offset, (record, embedding) in enumerate(zip(records, vectors, strict=True)):
         metadata = dict(record.chunk_metadata)
         table_index = metadata.get("table_index")
         table_id = table_ids_by_index.get(table_index) if isinstance(table_index, int) else None
@@ -152,6 +154,10 @@ def ingest_document(
                 chunk_metadata=metadata,
             )
         )
+        # A single insertmany of every chunk (each carrying a 1536-dim vector) trips
+        # Supabase's statement timeout on the larger filings, so flush in batches.
+        if (offset + 1) % INSERT_BATCH_SIZE == 0:
+            session.flush()
 
     session.commit()
     print(f"  Wrote {len(records)} chunk(s) for {document.accession_number}")

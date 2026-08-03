@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 
 from app.auth.dependencies import CurrentUser, get_access_token, get_current_user
@@ -17,11 +18,15 @@ from app.database.chats import (
     load_messages,
     require_thread_access,
 )
+from app.database.documents import get_chunk_with_document, get_surrounding_chunks
+from app.database.session import get_session
 from app.database.supabase import create_user_client
 from app.database.users import ensure_user
 from app.retrieval.retriever import DocumentRetriever
 from app.schemas.chat import (
     ChatStreamRequest,
+    ChunkContextPassage,
+    ChunkContextResponse,
     CreateThreadRequest,
     ThreadCreated,
     ThreadDetailResponse,
@@ -29,6 +34,10 @@ from app.schemas.chat import (
 )
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+# One chunk either side is enough to show why a cited passage says what it says without
+# turning the panel into a document reader.
+CONTEXT_RADIUS = 1
 
 
 @router.get("/threads", response_model=ThreadsResponse)
@@ -73,6 +82,35 @@ async def delete_thread_route(
 ) -> None:
     await require_thread_access(thread_id, user)
     await delete_thread(thread_id, access_token)
+
+
+@router.get("/chunks/{chunk_id}/context", response_model=ChunkContextResponse)
+async def get_chunk_context(
+    chunk_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+) -> ChunkContextResponse:
+    """The cited chunk plus its immediate neighbours, so an excerpt reads in context."""
+    return await asyncio.to_thread(_load_chunk_context, chunk_id)
+
+
+def _load_chunk_context(chunk_id: uuid.UUID) -> ChunkContextResponse:
+    with get_session() as session:
+        anchor = get_chunk_with_document(session, chunk_id)
+        if anchor is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chunk not found")
+
+        anchor_chunk, _ = anchor
+        passages = [
+            ChunkContextPassage(
+                chunk_id=chunk.id,
+                chunk_index=chunk.chunk_index,
+                text=chunk.text,
+                is_anchor=chunk.id == chunk_id,
+            )
+            for chunk in [anchor_chunk, *get_surrounding_chunks(session, chunk_id, CONTEXT_RADIUS)]
+        ]
+        passages.sort(key=lambda p: p.chunk_index)
+        return ChunkContextResponse(passages=passages)
 
 
 @router.post("/stream")

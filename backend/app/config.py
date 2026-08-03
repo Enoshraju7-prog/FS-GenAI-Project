@@ -18,8 +18,12 @@ class Settings(BaseSettings):
     supabase_anon_key: str
     supabase_service_role_key: str
 
-    # Postgres — direct/session connection for Alembic and raw DB access
+    # Postgres — direct/session connection for Alembic and raw DB access.
+    # Pool defaults (5 + 10 overflow) are too small for the ~40-analyst pilot, since
+    # every retrieval turn holds a connection while it runs blocking SQL in a thread.
     database_url: str
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
 
     # OpenAI
     openai_api_key: str
@@ -40,6 +44,10 @@ class Settings(BaseSettings):
     retrieval_fts_keyword_min: int = 3
     retrieval_fts_keyword_max: int = 5
     retrieval_fts_keyword_fast_path_tokens: int = 5
+
+    # Logging — JSON in deployed environments, human-readable locally.
+    log_level: str = "INFO"
+    log_json: bool = False
 
     # Comma-separated in .env; use `cors_origins` for the parsed list.
     allowed_origins: str = "http://localhost:5173"

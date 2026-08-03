@@ -165,7 +165,6 @@ def map_chunk_record(
             **_base_chunk_metadata(filing_metadata),
             "chunk_kind": "narrative",
             "raw_text": chunk.text,
-            "docling_meta": meta.export_json_dict(),
         },
     )
 
@@ -186,40 +185,7 @@ def chunk_document(
     for index, chunk in enumerate(chunker.chunk(dl_doc=doc)):
         if max_chunks is not None and index >= max_chunks:
             break
-        if _chunk_contains_table(chunk):
-            table = _matching_table_for_chunk(
-                chunker.contextualize(chunk=chunk),
-                tables,
-                used_table_indexes,
-            )
-            narrative_text = _narrative_text_without_tables(
-                chunker.contextualize(chunk=chunk)
-            )
-            if narrative_text:
-                records.append(
-                    ChunkRecord(
-                        chunk_index=len(records),
-                        text=narrative_text,
-                        page=_page_from_chunk_meta(chunk.meta),
-                        section=_section_from_chunk(chunk.meta, narrative_text),
-                        token_count=chunker.tokenizer.count_tokens(narrative_text),
-                        chunk_metadata={
-                            **_base_chunk_metadata(filing_metadata),
-                            "chunk_kind": "narrative",
-                            "raw_text": narrative_text,
-                            "docling_meta": chunk.meta.export_json_dict(),
-                        },
-                    )
-                )
-            if table is not None:
-                _append_table_row_records(
-                    records=records,
-                    table=table,
-                    chunker=chunker,
-                    filing_metadata=filing_metadata,
-                )
-                used_table_indexes.add(table.table_index)
-                continue
+        if not _chunk_contains_table(chunk):
             records.append(
                 map_chunk_record(
                     chunk_index=len(records),
@@ -229,20 +195,45 @@ def chunk_document(
                 )
             )
             continue
-        records.append(
-            map_chunk_record(
-                chunk_index=len(records),
-                chunk=chunk,
+
+        # Docling serializes tables by repeating each colspan cell into every column it
+        # covers, and keeps the layout-only spacer columns SEC filings are built from —
+        # so its table markdown is never usable. Keep the prose, and let
+        # extract_sec_tables own the table itself. A big table spans several Docling
+        # chunks, so only the first carries a match; the rest simply contribute prose.
+        contextualized = chunker.contextualize(chunk=chunk)
+        narrative_text = _narrative_text_without_tables(contextualized)
+        if narrative_text:
+            records.append(
+                ChunkRecord(
+                    chunk_index=len(records),
+                    text=narrative_text,
+                    page=_page_from_chunk_meta(chunk.meta),
+                    section=_section_from_chunk(chunk.meta, narrative_text),
+                    token_count=chunker.tokenizer.count_tokens(narrative_text),
+                    chunk_metadata={
+                        **_base_chunk_metadata(filing_metadata),
+                        "chunk_kind": "narrative",
+                        "raw_text": narrative_text,
+                    },
+                )
+            )
+
+        table = _matching_table_for_chunk(contextualized, tables, used_table_indexes)
+        if table is not None:
+            _append_table_records(
+                records=records,
+                table=table,
                 chunker=chunker,
                 filing_metadata=filing_metadata,
             )
-        )
+            used_table_indexes.add(table.table_index)
 
     if max_chunks is None:
         for table in tables:
             if table.table_index in used_table_indexes:
                 continue
-            _append_table_row_records(
+            _append_table_records(
                 records=records,
                 table=table,
                 chunker=chunker,
@@ -252,15 +243,29 @@ def chunk_document(
     return records
 
 
-def _append_table_row_records(
+def _append_table_records(
     *,
     records: list[ChunkRecord],
     table: ExtractedTable,
     chunker: HybridChunker,
     filing_metadata: dict[str, Any],
 ) -> None:
-    for row in table.rows:
-        text = _table_row_chunk_text(table, row)
+    # One chunk per table, split into row groups only when the table exceeds the token
+    # budget. Emitting a chunk per row instead multiplied the corpus ~4x and, with the
+    # full table JSON attached to each, was what filled the database.
+    for position, text in enumerate(_table_chunk_texts(table, chunker)):
+        metadata: dict[str, Any] = {
+            **_base_chunk_metadata(filing_metadata),
+            "chunk_kind": "table",
+            "table_index": table.table_index,
+            "table_title": table.title,
+            "raw_text": text,
+        }
+        if position == 0:
+            # document_tables is built from this, and every other chunk of the table
+            # reaches it through document_chunks.table_id — so store it exactly once.
+            metadata["table"] = table.to_dict()
+
         records.append(
             ChunkRecord(
                 chunk_index=len(records),
@@ -268,17 +273,27 @@ def _append_table_row_records(
                 page=None,
                 section=table.title,
                 token_count=chunker.tokenizer.count_tokens(text),
-                chunk_metadata={
-                    **_base_chunk_metadata(filing_metadata),
-                    "chunk_kind": "table_row",
-                    "table_index": table.table_index,
-                    "table_title": table.title,
-                    "row_label": row.label,
-                    "raw_text": text,
-                    "table": table.to_dict(),
-                },
+                chunk_metadata=metadata,
             )
         )
+
+
+def _table_chunk_texts(table: ExtractedTable, chunker: HybridChunker) -> list[str]:
+    whole = _table_group_text(table, list(table.rows))
+    if chunker.tokenizer.count_tokens(whole) <= CHUNK_MAX_TOKENS:
+        return [whole]
+
+    texts: list[str] = []
+    group: list[TableRow] = []
+    for row in table.rows:
+        if group and chunker.tokenizer.count_tokens(_table_group_text(table, [*group, row])) > CHUNK_MAX_TOKENS:
+            texts.append(_table_group_text(table, group))
+            group = [row]
+        else:
+            group.append(row)
+    if group:
+        texts.append(_table_group_text(table, group))
+    return texts
 
 
 def _base_chunk_metadata(filing_metadata: dict[str, Any]) -> dict[str, Any]:
@@ -338,24 +353,26 @@ def _narrative_text_without_tables(text: str) -> str:
     return "\n".join(lines)
 
 
-def _table_row_chunk_text(table: ExtractedTable, row: TableRow) -> str:
-    title = table.title or f"Table {table.table_index + 1}"
-    lines = [title]
+def _table_group_text(table: ExtractedTable, rows: list[TableRow]) -> str:
+    """Title, units, the given rows as a standalone markdown table, then footnotes.
+
+    Every chunk of a split table repeats the header so it reads on its own.
+    """
+    lines = [table.title or f"Table {table.table_index + 1}"]
     if table.units:
         lines.append(f"Units: {table.units}")
 
-    row_markdown = _markdown_for_row(table, row)
-    lines.append(row_markdown)
+    header = "| " + " | ".join(column.label for column in table.columns) + " |"
+    separator = "| " + " | ".join("---" for _ in table.columns) + " |"
+    body = [
+        "| " + " | ".join([row.label, *[cell.text for cell in row.cells]]) + " |"
+        for row in rows
+    ]
+    lines.append("\n".join([header, separator, *body]))
+
     if table.footnotes:
         lines.extend(table.footnotes)
     return "\n".join(lines)
-
-
-def _markdown_for_row(table: ExtractedTable, row: TableRow) -> str:
-    header = "| " + " | ".join(column.label for column in table.columns) + " |"
-    separator = "| " + " | ".join("---" for _ in table.columns) + " |"
-    body = "| " + " | ".join([row.label, *[cell.text for cell in row.cells]]) + " |"
-    return "\n".join([header, separator, body])
 
 
 def chunk_document_hierarchical(html_path: Path) -> list[str]:

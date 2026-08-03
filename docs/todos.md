@@ -142,9 +142,9 @@ Goal: grounded answers with enforced citations — the core product contract.
 - [x] Persist `message_citations` linked to assistant messages
 - [x] Unit tests: citation validation, grounding enforcement, message conversion
 - [x] Verify against client-brief example questions:
-  - [x] Answers cite specific filings and pages
-  - [x] Under-specified questions get "not enough evidence" responses
-  - [x] Question 10 refuses to infer beyond filings
+- [x] Answers cite specific filings and pages
+- [x] Under-specified questions get "not enough evidence" responses
+- [x] Question 10 refuses to infer beyond filings
 
 ---
 
@@ -152,12 +152,12 @@ Goal: grounded answers with enforced citations — the core product contract.
 
 Goal: analysts can verify every claim in one click.
 
-- [ ] Citation chips/links on assistant messages (company, filing type, date, page/section)
-- [ ] Source passage panel — show underlying excerpt for selected citation
-- [ ] Empty states (no threads, no corpus match)
-- [ ] Error states (auth expired, retrieval failure, grounding failure, network/CORS)
-- [ ] Loading/streaming status during assistant run
-- [ ] Verify: click a citation → see the exact passage from the filing
+- [x] Citation chips/links on assistant messages (company, filing type, date, page/section)
+- [x] Source passage panel — show underlying excerpt for selected citation
+- [x] Empty states (no threads, no corpus match)
+- [x] Error states (auth expired, retrieval failure, grounding failure, network/CORS)
+- [x] Loading/streaming status during assistant run
+- [x] Verify: click a citation → see the exact passage from the filing
 
 ---
 

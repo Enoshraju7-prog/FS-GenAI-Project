@@ -117,7 +117,18 @@ SUPABASE_SERVICE_ROLE_KEY=...
 DATABASE_URL=postgresql://postgres:password@db.yourproject.supabase.co:5432/postgres
 OPENAI_API_KEY=sk-...
 ALLOWED_ORIGINS=http://localhost:5173
+
+# Optional — shown with their defaults
+LOG_LEVEL=INFO       # DEBUG | INFO | WARNING | ERROR
+LOG_JSON=false       # true for machine-readable logs when deployed
+DB_POOL_SIZE=10
+DB_MAX_OVERFLOW=20
 ```
+
+`DATABASE_URL` must be the **direct/session** connection string, not the transaction
+pooler — Alembic and pgvector queries need a session connection.
+
+See `backend/.env.example` for the full annotated list, including retrieval tuning.
 
 Verify it's running: visit `http://localhost:8000/health` — you should see `{"status":"ok"}`.
 

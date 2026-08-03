@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import sys
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from typing import Any
@@ -153,6 +154,13 @@ def extract_sec_tables(html: str) -> list[ExtractedTable]:
         context = _table_context(table_node)
         normalized = _normalize_rows(raw_rows)
         if normalized is None:
+            # This table held numbers but no shape we recognise. Silently dropping it
+            # loses real financial data, so make it visible during ingestion.
+            print(
+                f"WARNING: could not normalize table {context['title'] or '<untitled>'!r} "
+                f"({len(raw_rows)} rows) — dropped",
+                file=sys.stderr,
+            )
             continue
 
         columns, rows = normalized
@@ -372,10 +380,60 @@ def _normalize_rows(
         return None
 
     header_tokens = _nonempty_texts(header_row)
+
+    # Maturity and repurchase schedules carry no header row at all — their first text
+    # row is already data ("2026 | $ | 12,393"). Treating it as a header invents columns
+    # no later row can fill, and the table gets dropped entirely.
+    if _looks_like_schedule_row(header_tokens):
+        schedule = _normalize_schedule(raw_rows)
+        if schedule is not None:
+            return schedule
+
     data_rows = raw_rows[raw_rows.index(header_row) + 1 :]
     if "Change" in header_tokens:
         return _normalize_sales_change_table(header_tokens, data_rows)
     return _normalize_simple_table(header_tokens, data_rows)
+
+
+def _looks_like_schedule_row(tokens: list[str]) -> bool:
+    if len(tokens) < 2:
+        return False
+    # A schedule row is a label and exactly one amount ("2026 | $ | 354"). Requiring a
+    # single amount is what separates it from a year header ("2025 | 2024 | 2023") and
+    # from a real multi-column data row ("Net sales | $ | 391,035 | $ | 383,285"), both
+    # of which must keep their own normalizers.
+    amounts = [token for token in tokens[1:] if token != "$"]
+    if len(amounts) != 1 or not _looks_numeric(amounts[0]):
+        return False
+    return "$" in tokens[1:] or _is_money(amounts[0])
+
+
+def _is_money(text: str) -> bool:
+    return bool(re.fullmatch(r"\(?\$?\d{1,3}(?:,\d{3})+(?:\.\d+)?\)?", text)) or bool(
+        re.fullmatch(r"\(?\$\s?[\d,]+(?:\.\d+)?\)?", text)
+    )
+
+
+def _normalize_schedule(
+    raw_rows: list[list[_RawCell]],
+) -> tuple[list[TableColumn], list[TableRow]] | None:
+    columns = [TableColumn("Item"), TableColumn("Amount")]
+    rows: list[TableRow] = []
+    for raw_row in raw_rows:
+        tokens = [cell for cell in raw_row if cell.text]
+        if len(tokens) < 2:
+            continue
+        text, consumed = _consume_amount(tokens[1:])
+        if not text:
+            continue
+        facts = tuple(fact for cell in tokens[1 : 1 + consumed] for fact in cell.facts)
+        rows.append(
+            TableRow(label=tokens[0].text, cells=(TableCell(text=text, facts=facts),))
+        )
+
+    if not rows:
+        return None
+    return columns, rows
 
 
 def _first_text_row(rows: list[list[_RawCell]]) -> list[_RawCell] | None:

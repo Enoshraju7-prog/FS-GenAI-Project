@@ -163,12 +163,20 @@ def test_chunk_document_end_to_end(tmp_path):
     assert all(r.token_count <= CHUNK_MAX_TOKENS for r in records)
 
     kinds = {r.chunk_metadata["chunk_kind"] for r in records}
-    assert "table_row" in kinds
+    assert "table" in kinds
 
-    table_row_texts = [
-        r.text for r in records if r.chunk_metadata["chunk_kind"] == "table_row"
-    ]
-    assert any("391,035" in text for text in table_row_texts)
+    table_records = [r for r in records if r.chunk_metadata["chunk_kind"] == "table"]
+    assert any("391,035" in r.text for r in table_records)
+
+    # The full table dict is stored once per table, not on every chunk of it — copying
+    # it onto each chunk is what previously blew the database size budget.
+    for table_index in {r.chunk_metadata["table_index"] for r in table_records}:
+        with_blob = [
+            r
+            for r in table_records
+            if r.chunk_metadata["table_index"] == table_index and "table" in r.chunk_metadata
+        ]
+        assert len(with_blob) == 1
 
     for record in records:
         assert record.chunk_metadata["ticker"] == "AAPL"

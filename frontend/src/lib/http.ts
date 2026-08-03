@@ -2,13 +2,14 @@ import { env } from "@/lib/env"
 import { supabase } from "@/lib/supabase"
 
 export class ApiError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-    public readonly isNetworkError = false,
-  ) {
+  readonly status: number
+  readonly isNetworkError: boolean
+
+  constructor(status: number, message: string, isNetworkError = false) {
     super(message)
     this.name = "ApiError"
+    this.status = status
+    this.isNetworkError = isNetworkError
   }
 }
 

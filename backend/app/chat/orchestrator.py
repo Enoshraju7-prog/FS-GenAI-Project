@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 from collections.abc import AsyncIterator
 
@@ -19,10 +20,13 @@ from app.chat.streaming import (
     stream_status,
 )
 from app.grounding.validator import GroundingValidator, prune_unreferenced_citations
+from app.logging import get_logger
 from app.retrieval.retriever import DocumentRetriever
 from app.schemas.chat import UIMessage
 
 MAX_VALIDATION_ATTEMPTS = 2
+
+log = get_logger(__name__)
 
 
 async def _yield_status_updates(
@@ -53,11 +57,16 @@ async def run_turn(
     retriever: DocumentRetriever,
 ) -> AsyncIterator[str]:
     loop = asyncio.get_running_loop()
+    turn_log = log.bind(thread_id=str(thread_id), user_id=str(user.id))
     query = text_from_parts(user_message.parts).strip()
     if not query:
+        turn_log.warning("turn_rejected", reason="empty_user_message")
         async for event in stream_error("User message is empty."):
             yield event
         return
+
+    started = time.perf_counter()
+    turn_log.info("turn_started", query_chars=len(query))
 
     async for event in stream_status("analyzing", "Analyzing your question…"):
         yield event
@@ -89,6 +98,9 @@ async def run_turn(
         try:
             grounded = await agent_task
         except Exception as exc:
+            # The streamed message only carries str(exc); without this the traceback is
+            # lost entirely and a failed turn is undebuggable.
+            turn_log.exception("agent_run_failed", attempt=attempt, error=str(exc))
             async for event in stream_error(f"Assistant run failed: {exc}"):
                 yield event
             return
@@ -101,6 +113,7 @@ async def run_turn(
         if validation.ok or attempt == MAX_VALIDATION_ATTEMPTS:
             break
 
+        turn_log.warning("grounding_retry", attempt=attempt)
         async for event in stream_status(
             "retrying",
             "Could not fully verify citations; retrying with stricter grounding…",
@@ -108,9 +121,17 @@ async def run_turn(
             yield event
 
     if grounded is None or validation is None:
+        turn_log.error("turn_failed", reason="no_answer_produced")
         async for event in stream_error("Assistant run failed before producing an answer."):
             yield event
         return
+
+    turn_log.info(
+        "turn_completed",
+        grounded=validation.ok,
+        citations=len(grounded.citations),
+        elapsed_s=round(time.perf_counter() - started, 2),
+    )
 
     if validation.ok:
         async for event in stream_status("streaming", "Preparing answer…"):
