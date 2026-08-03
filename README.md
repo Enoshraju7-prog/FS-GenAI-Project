@@ -99,7 +99,8 @@ cd backend
 # Create the .env file (copy and fill in your values)
 cp .env.example .env
 
-# Install dependencies
+# Install dependencies (add --extra ingest if you plan to run the ingestion pipeline —
+# it pulls Docling, which is large and only needed to parse SEC HTML locally)
 uv sync
 
 # Run database migrations
@@ -190,9 +191,43 @@ Edit `QUERY_KEY` at the top of `smoke_assistant.py` to try a different question.
 | 4 — Ingestion | ✅ Done | Parse SEC filings → hierarchical chunks → OpenAI embeddings → Supabase |
 | 5 — Retrieval | ✅ Done | Vector (pgvector) + full-text search with LLM keyword extraction, fused with Reciprocal Rank Fusion |
 | 6 — LLM agent | ✅ Done | PydanticAI agent, grounded answers, fail-closed citation validation |
-| 7 — Trust UI | ⬜ To do | Citation chips, source passage panel |
-| 8 — Pilot readiness | ⬜ To do | Logging, latency review, end-to-end smoke tests |
-| 9 — Deploy (Railway) | ⬜ To do | Production deploy |
+| 7 — Trust UI | ✅ Done | Citation chips, source panel with neighbouring chunks, markdown tables, live pipeline status, light/dark mode |
+| 8 — Pilot readiness | ✅ Done | `structlog`, all 10 brief questions grounded, DB pool sizing, table-fidelity fix (19,544 → 6,051 chunks) |
+| 9 — Deploy (Railway) | ✅ Done | Two Docker services on Railway, Caddy serving the SPA — see [Deployment](#deployment-railway) |
+
+---
+
+## Deployment (Railway)
+
+The app runs as **two Railway services in one project**, both built from Dockerfiles.
+Supabase stays at Supabase — there is no Railway Postgres.
+
+| Service | Built from | Runs |
+|---|---|---|
+| `document-copilot-backend` | `backend/Dockerfile` | FastAPI + Uvicorn |
+| `document-copilot-frontend` | `frontend/Dockerfile` | Vite build served by Caddy |
+
+**Live:** https://document-copilot-frontend-production-85f8.up.railway.app
+
+Three things that are easy to get wrong, and why they matter:
+
+- **This is a monorepo.** There is no `package.json` or `pyproject.toml` at the repo
+  root, so a builder pointed at the root cannot tell what the project is. Each service
+  builds from its own subdirectory (`railway up ./backend --path-as-root`).
+- **`VITE_*` variables are build-time, not runtime.** Vite bakes them into the
+  JavaScript bundle, so they must be set *before* the frontend image is built —
+  a runtime variable arrives far too late. They are declared as `ARG` in
+  `frontend/Dockerfile`.
+- **Deploy the backend first.** The frontend build needs the backend's public URL, and
+  the backend then needs the frontend's URL in `ALLOWED_ORIGINS` for CORS. Order is:
+  backend → domain → frontend → domain → update backend CORS.
+
+After deploying, set **Supabase → Authentication → URL Configuration** to the frontend
+domain. Password sign-in works without it, but sign-up confirmation and password-reset
+emails would link to `localhost`.
+
+Health endpoints: backend `/health` returns `{"status":"ok"}`, frontend `/health`
+returns `ok`.
 
 ---
 
