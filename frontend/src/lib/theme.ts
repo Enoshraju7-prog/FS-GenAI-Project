@@ -2,9 +2,11 @@ export type Theme = "light" | "dark" | "system"
 
 const STORAGE_KEY = "theme"
 
+// Dark is the designed default — the light palette exists, but the product was styled
+// for the dark canvas.
 export function getStoredTheme(): Theme {
   const stored = localStorage.getItem(STORAGE_KEY)
-  return stored === "light" || stored === "dark" || stored === "system" ? stored : "system"
+  return stored === "light" || stored === "dark" || stored === "system" ? stored : "dark"
 }
 
 export function setStoredTheme(theme: Theme): void {

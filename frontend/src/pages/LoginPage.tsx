@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import AppLogo from "@/components/AppLogo"
 import { supabase } from "@/lib/supabase"
 
 type Mode = "sign-in" | "sign-up"
@@ -60,7 +61,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4">
+      <div className="mb-8 flex flex-col items-center gap-3">
+        <AppLogo className="size-12 rounded-xl" />
+        <h1 className="font-serif text-3xl tracking-tight">Document Copilot</h1>
+        <p className="text-sm text-muted-foreground">SEC filing assistant</p>
+      </div>
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>{mode === "sign-in" ? "Sign in" : "Create account"}</CardTitle>

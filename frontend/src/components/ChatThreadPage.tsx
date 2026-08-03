@@ -32,6 +32,13 @@ const SUGGESTIONS = [
   "Across Microsoft's filings, what changed in how the company describes Azure, AI infrastructure, and cloud capacity constraints?",
 ]
 
+function greeting(): string {
+  const hour = new Date().getHours()
+  if (hour < 12) return "Good morning."
+  if (hour < 18) return "Good afternoon."
+  return "Good evening."
+}
+
 interface Props {
   threadId: string
   onTitleChange: (title: string) => void
@@ -128,35 +135,80 @@ function ChatInner({
     await sendMessage({ text })
   }
 
+  const composer = (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        void send(input)
+      }}
+      className="relative w-full"
+    >
+      <Textarea
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault()
+            void send(input)
+          }
+        }}
+        placeholder="Ask about SEC filings…"
+        rows={3}
+        className="max-h-48 resize-none rounded-2xl bg-card px-4 py-3.5 pr-14 text-base shadow-sm"
+      />
+      <Button
+        type="submit"
+        size="icon"
+        disabled={!input.trim() || isStreaming}
+        className="absolute right-3 bottom-3 size-8 rounded-full"
+      >
+        <ArrowUp className="size-4" />
+        <span className="sr-only">Send</span>
+      </Button>
+    </form>
+  )
+
+  // An empty thread is a landing page, not an empty transcript: the composer sits in
+  // the middle of the canvas rather than pinned to the bottom of nothing.
+  if (messages.length === 0 && !isStreaming && !error) {
+    return (
+      <div className="flex flex-1 min-h-0 w-full items-center justify-center overflow-y-auto px-4 py-10">
+        <div className="w-full max-w-2xl">
+          <div className="mb-8 flex items-center justify-center gap-3">
+            <AppLogo className="size-9 rounded-lg" />
+            <h1 className="font-serif text-3xl font-normal tracking-tight sm:text-4xl">{greeting()}</h1>
+          </div>
+          {composer}
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {SUGGESTIONS.map((suggestion) => (
+              <button
+                key={suggestion}
+                type="button"
+                onClick={() => send(suggestion)}
+                className="rounded-xl border border-border p-3 text-left text-sm text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+          <p className="mt-6 text-center text-xs text-muted-foreground">
+            Answers are grounded in SEC filings. Verify citations before relying on them.
+          </p>
+        </div>
+        <SourcePassagePanel
+          citation={selectedCitation}
+          onOpenChange={(open) => !open && setSelectedCitation(null)}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-1 min-h-0 w-full flex-col">
       <MessageScrollerProvider autoScroll defaultScrollPosition="last-anchor">
         <MessageScroller className="flex-1 min-h-0">
           <MessageScrollerViewport>
             <MessageScrollerContent className="mx-auto w-full max-w-2xl p-6">
-              {messages.length === 0 && !isStreaming && (
-                <div className="flex flex-col items-center py-16 text-center">
-                  <AppLogo className="size-12 rounded-xl p-2" />
-                  <h2 className="mt-4 text-xl font-semibold">How can I help with your filings?</h2>
-                  <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                    Ask a question about SEC filings. Every answer is grounded in source documents with
-                    verifiable citations.
-                  </p>
-                  <div className="mt-8 grid w-full gap-3 sm:grid-cols-2">
-                    {SUGGESTIONS.map((suggestion) => (
-                      <button
-                        key={suggestion}
-                        type="button"
-                        onClick={() => send(suggestion)}
-                        className="rounded-xl border border-border p-4 text-left text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {messages.map((msg) => (
                 <MessageScrollerItem key={msg.id} messageId={msg.id} scrollAnchor={msg.role === "user"}>
                   <MessageBubble message={msg} onSelectCitation={setSelectedCitation} />
@@ -180,37 +232,8 @@ function ChatInner({
         </MessageScroller>
       </MessageScrollerProvider>
 
-      <div className="border-t px-4 py-3">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            void send(input)
-          }}
-          className="relative mx-auto w-full max-w-2xl"
-        >
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault()
-                void send(input)
-              }
-            }}
-            placeholder="Ask about SEC filings…"
-            rows={2}
-            className="max-h-48 resize-none pr-12"
-          />
-          <Button
-            type="submit"
-            size="icon"
-            disabled={!input.trim() || isStreaming}
-            className="absolute right-2 bottom-2 size-8 rounded-full"
-          >
-            <ArrowUp className="size-4" />
-            <span className="sr-only">Send</span>
-          </Button>
-        </form>
+      <div className="px-4 pb-3">
+        <div className="mx-auto w-full max-w-2xl">{composer}</div>
         <p className="mt-2 text-center text-xs text-muted-foreground">
           Answers are grounded in SEC filings. Verify citations before relying on them.
         </p>

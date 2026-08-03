@@ -95,7 +95,7 @@ export default function AppSidebar({ activeThreadId, theme, onThemeChange }: Pro
             <SidebarMenuButton size="lg" tooltip="Document Copilot" onClick={() => navigate("/chats")}>
               <AppLogo />
               <div className="grid flex-1 text-left leading-tight">
-                <span className="truncate text-sm font-semibold">Document Copilot</span>
+                <span className="truncate font-serif text-lg">Document Copilot</span>
                 <span className="truncate text-xs text-sidebar-foreground/60">SEC filing assistant</span>
               </div>
             </SidebarMenuButton>
